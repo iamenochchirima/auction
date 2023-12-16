@@ -4,7 +4,7 @@
       "main": "src/escrow_backend/main.mo",
       "type": "motoko"
     },
-    "icp_ledger_canister": {
+    "ledger_canister": {
       "type": "custom",
       "candid": "https://raw.githubusercontent.com/dfinity/ic/4778b79d21b327f8ee6c86e023da57236d3cbab1/rs/rosetta-api/icp_ledger/ledger.did",
       "wasm": "https://download.dfinity.systems/ic/4778b79d21b327f8ee6c86e023da57236d3cbab1/canisters/ledger-canister.wasm.gz",
@@ -15,18 +15,23 @@
       }
     },
     "escrow_frontend": {
-      "dependencies": ["escrow_backend"],
+      "dependencies": [
+        "escrow_backend"
+      ],
       "frontend": {
         "entrypoint": "src/escrow_frontend/src/index.html"
       },
-      "source": ["src/escrow_frontend/assets", "dist/escrow_frontend/"],
+      "source": [
+        "src/escrow_frontend/assets",
+        "dist/escrow_frontend/"
+      ],
       "type": "assets"
     }
   },
   "defaults": {
     "build": {
       "args": "",
-      "packtool": ""
+      "packtool": "mops sources"
     }
   },
   "output_env_file": ".env",
