@@ -10,8 +10,11 @@ module {
     };
 
     public type BidRequest = {
-        bidder: Account.AccountIdentifier;
         amount: Nat64;
+    };
+
+    public type Balance = {
+        e8s: Nat64;
     };
 
     public type Auction = {

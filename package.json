@@ -10,13 +10,15 @@
   ],
   "scripts": {
     "start": "run-p frontend",
+    "dfx": "dfx start --clean --background",
     "frontend": "vite --port 3000",
-    "backend": "dfx deploy ckhedge_backend",
+    "backend": "dfx deploy escrow_backend",
     "build": "tsc && vite build",
     "deploy:local": "dfx deploy --network=local",
     "deploy:ic": "dfx deploy --network=ic",
     "generate": "dfx generate escrow_backend",
-    "setup": "dfx identity use minter && export MINTER_ACCOUNT_ID=$(dfx ledger account-id) && dfx identity use default && export DEFAULT_ACCOUNT_ID=$(dfx ledger account-id)",
+    "setup1": "dfx identity use minter && export MINTER_ACCOUNT_ID=$(dfx ledger account-id)",
+    "setup2": "dfx identity use default && export DEFAULT_ACCOUNT_ID=$(dfx ledger account-id)",
     "deploy": "dfx deploy --specified-id ryjl3-tyaaa-aaaaa-aaaba-cai ledger_canister --argument \"(variant { Init = record { minting_account = \\\"$MINTER_ACCOUNT_ID\\\"; initial_values = vec { record { \\\"$DEFAULT_ACCOUNT_ID\\\"; record { e8s = 10_000_000_000 : nat64; }; }; }; send_whitelist = vec {}; transfer_fee = opt record { e8s = 10_000 : nat64; }; token_symbol = opt \\\"LICP\\\"; token_name = opt \\\"Local ICP\\\" } })\" && dfx deploy"
   },
   "dependencies": {
@@ -24,6 +26,7 @@
     "@dfinity/auth-client": "^0.20.2",
     "@dfinity/candid": "^0.20.2",
     "@dfinity/principal": "^0.20.2",
+    "@infu/icblast": "^2.0.46",
     "ic-websocket-js": "^0.3.2",
     "postcss-loader": "^7.3.3",
     "process": "^0.11.10",
