@@ -23,8 +23,9 @@ import Utils "utils/utils";
 
 actor Self {
 
-  let AuctionInterval = 60; // seconds
-  let AuctionIntervalNanoseconds = 60_000_000_000;
+  let AuctionInterval = 600; // seconds
+  let AuctionIntervalNanoseconds = 600_000_000_000;
+  let e8s : Nat64 = 1000000000;
   let MintetAccount = "278b012b6396eac3f959e62c258d989aea98b5112aceb09fbbc83edc3138966f";
 
   type Bid = Types.Bid;
@@ -74,19 +75,24 @@ actor Self {
     auctions.put(uuid, auction);
   };
 
-  ignore setTimer(
-    #seconds(AuctionInterval),
-    func() : async () {
-      ignore recurringTimer(#seconds AuctionInterval, createAuction);
-      await createAuction();
-    },
-  );
+  // TODO: uncomment this, only for testing
+  // ignore setTimer(
+  //   #seconds(AuctionInterval),
+  //   func() : async () {
+  //     ignore recurringTimer(#seconds AuctionInterval, createAuction);
+  //     await createAuction();
+  //   },
+  // );
+  // TODO: remove this, only for testing
+  public shared func startAuction() : async () {
+    await createAuction();
+  };
 
   public shared query func getAuction(id : Text) : async ?Auction {
     auctions.get(id);
   };
 
-  public shared query func getOngoingAuction() : async Result.Result<Auction, ()> {
+  public shared query func getOngoingAuction() : async Result.Result<Auction, Text> {
     let currentTime = Time.now();
     let ongoingAuctions = Array.filter<Auction>(
       Iter.toArray(auctions.vals()),
@@ -111,7 +117,7 @@ actor Self {
     if (ongoingAuctions.size() > 0) {
       #ok(ongoingAuctions[0]);
     } else {
-      #err();
+      #err("No ongoing auction");
     };
   };
 
@@ -120,14 +126,14 @@ actor Self {
   };
 
   // Bid on an auction
-  public shared ({ caller }) func placeBid(args : BidRequest) : async Result.Result<(), Text> {
+  public shared ({ caller }) func placeBid(args : BidRequest) : async Result.Result<Text, Text> {
     let newBidId = Utils.generate_uuid();
     let bidder = userAID(caller);
     let currentTime = Time.now();
     let newBid : Bid = {
       id = newBidId;
       bidder = bidder;
-      amount = args.amount;
+      amount = args.amount * e8s;
       refunded = false;
       created = currentTime;
     };
@@ -147,7 +153,33 @@ actor Self {
         };
 
         switch (auction.highestBid) {
-          case null {
+          case (null) {
+            // Transfer ICP to the canister account
+            let userBal = await Ledger.account_balance({
+              account = Blob.toArray(bidder);
+            });
+
+            if (userBal.e8s < (args.amount * e8s)) {
+              return #err("Not enough ICP to send");
+            } else {
+              let result = await Ledger.transfer({
+                to = Blob.toArray(myAccountId());
+                fee = { e8s = 10_000 : Nat64 };
+                memo = 0;
+                from_subaccount = null;
+                to_subaccount = null;
+                created_at_time = null;
+                amount = { e8s = args.amount * e8s };
+              });
+              switch (result) {
+                case (#Ok(_)) {};
+                case (#Err(err)) {
+                  return #err(transferError(err));
+                };
+              };
+            };
+
+            // Update auction and bids
             let updatedAuction : Auction = {
               auction with
               highestBid = ?newBid;
@@ -156,71 +188,97 @@ actor Self {
             auctionBidsList := List.push(newBid, auctionBidsList);
             auctionBids.put(auction.id, auctionBidsList);
             bids.put(newBidId, newBid);
-            #ok();
+            return #ok("Bid placed successfully");
           };
           case (?highestBid) {
-            if (args.amount > highestBid.amount) {
-              let updatedAuction : Auction = {
-                auction with
-                highestBid = ?newBid;
+            if ((args.amount * e8s) > highestBid.amount) {
+              // Transfer ICP to the previous highest bidder account
+              let transfereRes = await Ledger.transfer({
+                to = Blob.toArray(highestBid.bidder);
+                fee = { e8s = 10_000 : Nat64 };
+                memo = 0;
+                from_subaccount = null;
+                to_subaccount = null;
+                created_at_time = null;
+                amount = { e8s = highestBid.amount };
+              });
+              switch (transfereRes) {
+                case (#Ok(_)) {};
+                case (#Err(err)) {
+                  return #err(transferError(err));
+                };
               };
-              auctions.put(auction.id, updatedAuction);
-              auctionBidsList := List.push(newBid, auctionBidsList);
-              auctionBids.put(auction.id, auctionBidsList);
-              bids.put(newBidId, newBid);
 
-              // refund previous highest bidder and update bid
-              let updatedHighestBid : Bid = {
-                highestBid with
-                refunded = true;
+              // Transfer ICP to the canister account
+              let userBal = await Ledger.account_balance({
+                account = Blob.toArray(bidder);
+              });
+
+              if (userBal.e8s < (args.amount * e8s)) {
+                return #err("Not enough ICP to send");
+              } else {
+                let result = await Ledger.transfer({
+                  to = Blob.toArray(myAccountId());
+                  fee = { e8s = 10_000 : Nat64 };
+                  memo = 0;
+                  from_subaccount = null;
+                  to_subaccount = null;
+                  created_at_time = null;
+                  amount = { e8s = args.amount * e8s };
+                });
+                switch (result) {
+                  case (#Ok(_)) {};
+                  case (#Err(err)) {
+                    return #err(transferError(err));
+                  };
+                };
               };
-              bids.put(highestBid.id, updatedHighestBid);
-              // TODO: refund previous highest bidder
-              #ok();
             } else {
-              #err("Bid amount is lower than current highest bid");
+              return #err("Bid amount is lower than current highest bid");
             };
+
+            // Update auction and bids
+            let updatedAuction : Auction = {
+              auction with
+              highestBid = ?newBid;
+            };
+            auctions.put(auction.id, updatedAuction);
+            auctionBidsList := List.push(newBid, auctionBidsList);
+            auctionBids.put(auction.id, auctionBidsList);
+            bids.put(newBidId, newBid);
+
+            // refund previous highest bidder and update bid
+            let updatedHighestBid : Bid = {
+              highestBid with
+              refunded = true;
+            };
+            bids.put(highestBid.id, updatedHighestBid);
+            return #ok("Bid placed successfully");
           };
         };
       };
-      case (#err()) {
+      case (#err(msg)) {
         #err("No ongoing auction");
       };
     };
   };
 
-  public shared ({ caller }) func getFreeICP() : async Result.Result<(), Text> {
-    let mintedBalance = await Ledger.account_balance({
-      account = Blob.toArray(myAccountId());
-    });
-    Debug.print("Minted balance: " # Nat64.toText(mintedBalance.e8s));
-    let icptoSend : Nat64 = 1000000000;
-    if (mintedBalance.e8s < icptoSend) {
-      return #err("Not enough ICP to send");
-    } else {
-      let result = await Ledger.transfer({
-        to = Blob.toArray(userAID(caller));
-        fee = { e8s = 10_000 : Nat64 };
-        memo = 0;
-        from_subaccount = null;
-        to_subaccount = null;
-        created_at_time = null;
-        amount = { e8s = icptoSend };
-      });
-      switch (result) {
-        case (#Ok(_)) {
-          #ok();
-        };
-        case (#Err(err)) {
-          switch(err) {
-            case(#BadFee(msg)) { #err("Bad fee: " # Nat64.toText(msg.expected_fee.e8s)); };
-            case(#InsufficientFunds(msg)) { #err("Insufficient funds: " # Nat64.toText(msg.balance.e8s)); };
-            case(#TxCreatedInFuture(msg)) { #err("Tx created in future: "); };
-            case(#TxDuplicate(msg)) { #err("Tx Duplicate: " # Nat64.toText(msg.duplicate_of)); };
-            case(#TxTooOld(msg)) { #err("Tx expired: " # Nat64.toText(msg.allowed_window_nanos)); };
-          };
-         
-        };
+  func transferError(err : Ledger.TransferError) : Text {
+    switch (err) {
+      case (#BadFee(msg)) {
+        "Bad fee: " # Nat64.toText(msg.expected_fee.e8s);
+      };
+      case (#InsufficientFunds(msg)) {
+        "Insufficient funds: " # Nat64.toText(msg.balance.e8s);
+      };
+      case (#TxCreatedInFuture(msg)) {
+        "Tx created in future: ";
+      };
+      case (#TxDuplicate(msg)) {
+        "Tx Duplicate: " # Nat64.toText(msg.duplicate_of);
+      };
+      case (#TxTooOld(msg)) {
+        "Tx expired: " # Nat64.toText(msg.allowed_window_nanos);
       };
     };
   };
@@ -231,6 +289,13 @@ actor Self {
       account = Blob.toArray((callerAID));
     });
     callerBalance;
+  };
+
+  public shared func getCanisterBalance() : async Balance {
+    let canisterBalance = await Ledger.account_balance({
+      account = Blob.toArray(myAccountId());
+    });
+    canisterBalance;
   };
 
   // Returns the default account identifier of this canister.
