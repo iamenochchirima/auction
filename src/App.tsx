@@ -1,25 +1,37 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "./components/Context";
 import {
-  Auction,
   Bid,
   BidRequest,
 } from "./declarations/escrow_backend/escrow_backend.did";
 import { toast } from "react-toastify";
+import { Principal } from "@dfinity/principal";
+import { canisterId } from "./declarations/escrow_backend";
 
 interface Result {
   err?: null;
   ok?: null;
 }
 
+type Auction = {
+  endTime: bigint;
+  highestBid: undefined | Bid;
+  id: string;
+  item: string;
+  startTime: bigint;
+  status: { ended: null } | { running: null };
+}
+
 let e8s = 100000000;
 
 const App = () => {
-  const { isAuthenticated, login, logout, backendActor, identity } = useAuth();
-  const [currrentAuction, setCurrentAuction] = useState<any | null>(null);
+  const { isAuthenticated, login, logout, backendActor, identity, LEDGER } =
+    useAuth();
+  const [currrentAuction, setCurrentAuction] = useState<Auction | null>(null);
   const [placingBid, setPlacingBid] = useState<boolean>(false);
   const [icpBalance, setIcpBalance] = useState<number>(0);
   const [canisterBal, setCanisterBal] = useState<number>(0);
+  const [ledgerBlock, setLedgerBlock] = useState<any[] | null>(null);
 
   const [gettingBalances, setGettingBalances] = useState<boolean>(false);
   const [gettingAuction, setGettingAuction] = useState<boolean>(false);
@@ -27,12 +39,17 @@ const App = () => {
 
   const [bidAmount, setBidAmount] = useState<number>(0);
 
+  console.log(icpBalance)
+
   useEffect(() => {
     if (backendActor) {
       getCurrentAuction();
       getBalances();
     }
-  }, [backendActor]);
+    if (LEDGER) {
+      getLedgerBlocks();
+    }
+  }, [backendActor, LEDGER]);
 
   const getCurrentAuction = async () => {
     setGettingAuction(true);
@@ -46,13 +63,120 @@ const App = () => {
     }
   };
 
+  const getLedgerBlocks = async () => {
+    let blocks = await LEDGER.query_blocks({ start: 0, length: 10 });
+    setLedgerBlock(blocks);
+  };
+
   const handlePlaceBid = async () => {
     try {
       setPlacingBid(true);
 
+      if (currrentAuction.highestBid) {
+        if (icpBalance < Number(currrentAuction.highestBid.amount)) {
+          toast.error(`You don't have enough ICP balance`, {
+            autoClose: 5000,
+            position: "top-center",
+            hideProgressBar: true,
+          });
+          setPlacingBid(false);
+          return;
+        } else if ((bidAmount * e8s) < Number(currrentAuction.highestBid.amount)) {
+          console.log("bidAmount", bidAmount, "highestBid", currrentAuction.highestBid.amount);
+          toast.error(`Bid amount should be higher than current bid`, {
+            autoClose: 5000,
+            position: "top-center",
+            hideProgressBar: true,
+          });
+          setPlacingBid(false);
+          return;
+        } 
+        let canisterAID = await LEDGER.account_identifier({
+          owner: Principal.fromText(canisterId),
+        });
+        let result = await LEDGER.transfer({
+          to: canisterAID,
+          fee: { e8s: 10_000 },
+          memo: 0,
+          from_subaccount: null,
+          to_subaccount: null,
+          created_at_time: null,
+          amount: { e8s: bidAmount * e8s },
+        });
+
+        console.log("Send results", result);
+        let bid: BidRequest = {
+          amount: BigInt(bidAmount),
+        };
+        let res: Result = await backendActor.placeBid(bid);
+        if (res.err) {
+          toast.error(`${res.err}`, {
+            autoClose: 5000,
+            position: "top-center",
+            hideProgressBar: true,
+          });
+          setPlacingBid(false);
+        } else if (res.ok) {
+          toast.success(`Bid placed successfully`, {
+            autoClose: 5000,
+            position: "top-center",
+            hideProgressBar: true,
+          });
+        }
+        getBalances();
+        getCurrentAuction();
+        setPlacingBid(false);
+      } else {
+        if (icpBalance < (bidAmount * e8s)) {
+          toast.error(`You don't have enough ICP balance`, {
+            autoClose: 5000,
+            position: "top-center",
+            hideProgressBar: true,
+          });
+          setPlacingBid(false);
+          return;
+        }
+        let canisterAID = await LEDGER.account_identifier({
+          owner: Principal.fromText(canisterId),
+        });
+        let result = await LEDGER.transfer({
+          to: canisterAID,
+          fee: { e8s: 10_000 },
+          memo: 0,
+          from_subaccount: null,
+          to_subaccount: null,
+          created_at_time: null,
+          amount: { e8s: bidAmount * e8s },
+        });
+
+        console.log("Send results", result);
+        let bid: BidRequest = {
+          amount: BigInt(bidAmount),
+        };
+        let res: Result = await backendActor.placeBid(bid);
+        if (res.err) {
+          toast.error(`${res.err}`, {
+            autoClose: 5000,
+            position: "top-center",
+            hideProgressBar: true,
+          });
+          setPlacingBid(false);
+        } else if (res.ok) {
+          toast.success(`Bid placed successfully`, {
+            autoClose: 5000,
+            position: "top-center",
+            hideProgressBar: true,
+          });
+        }
+        getBalances();
+        getCurrentAuction();
+        setPlacingBid(false);
+      }
+
       let bid: BidRequest = {
         amount: BigInt(bidAmount),
       };
+      console.log("bid", bid)
       let res: Result = await backendActor.placeBid(bid);
       if (res.err) {
         toast.error(`${res.err}`, {
@@ -82,7 +206,6 @@ const App = () => {
     }
   };
 
-
   const createAuction = async () => {
     setCreatingAuction(true);
     await backendActor.startAuction();
@@ -103,8 +226,6 @@ const App = () => {
       setGettingBalances(false);
     }
   };
-
-  console.log(identity?.getPrincipal().toString());
 
   return (
     <div>
@@ -133,7 +254,7 @@ const App = () => {
               className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
               onClick={createAuction}
             >
-             {creatingAuction ? "Creating auction..." : "Create auction"}
+              {creatingAuction ? "Creating auction..." : "Create auction"}
             </button>
           )}
         </div>
@@ -166,10 +287,13 @@ const App = () => {
             </div>
           </>
         ) : (
-          <div>{gettingAuction ? 
-            <div>Getting auction...</div> : 
-            <div>There is no auction currently running</div>
-          }</div>
+          <div>
+            {gettingAuction ? (
+              <div>Getting auction...</div>
+            ) : (
+              <div>There is no auction currently running</div>
+            )}
+          </div>
         )}
       </div>
 

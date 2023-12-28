@@ -25,7 +25,7 @@ actor Self {
 
   let AuctionInterval = 600; // seconds
   let AuctionIntervalNanoseconds = 600_000_000_000;
-  let e8s : Nat64 = 1000000000;
+  let e8s : Nat64 = 100000000;
   let MintetAccount = "278b012b6396eac3f959e62c258d989aea98b5112aceb09fbbc83edc3138966f";
 
   type Bid = Types.Bid;
@@ -154,30 +154,30 @@ actor Self {
 
         switch (auction.highestBid) {
           case (null) {
-            // Transfer ICP to the canister account
-            let userBal = await Ledger.account_balance({
-              account = Blob.toArray(bidder);
-            });
+            // // Transfer ICP to the canister account
+            // let userBal = await Ledger.account_balance({
+            //   account = Blob.toArray(bidder);
+            // });
 
-            if (userBal.e8s < (args.amount * e8s)) {
-              return #err("Not enough ICP to send");
-            } else {
-              let result = await Ledger.transfer({
-                to = Blob.toArray(myAccountId());
-                fee = { e8s = 10_000 : Nat64 };
-                memo = 0;
-                from_subaccount = null;
-                to_subaccount = null;
-                created_at_time = null;
-                amount = { e8s = args.amount * e8s };
-              });
-              switch (result) {
-                case (#Ok(_)) {};
-                case (#Err(err)) {
-                  return #err(transferError(err));
-                };
-              };
-            };
+            // if (userBal.e8s < (args.amount * e8s)) {
+            //   return #err("Not enough ICP to send");
+            // } else {
+            //   let result = await Ledger.transfer({
+            //     to = Blob.toArray(myAccountId());
+            //     fee = { e8s = 10_000 : Nat64 };
+            //     memo = 0;
+            //     from_subaccount = null;
+            //     to_subaccount = null;
+            //     created_at_time = null;
+            //     amount = { e8s = args.amount * e8s };
+            //   });
+            //   switch (result) {
+            //     case (#Ok(_)) {};
+            //     case (#Err(err)) {
+            //       return #err(transferError(err));
+            //     };
+            //   };
+            // };
 
             // Update auction and bids
             let updatedAuction : Auction = {
@@ -210,29 +210,29 @@ actor Self {
               };
 
               // Transfer ICP to the canister account
-              let userBal = await Ledger.account_balance({
-                account = Blob.toArray(bidder);
-              });
+              // let userBal = await Ledger.account_balance({
+              //   account = Blob.toArray(bidder);
+              // });
 
-              if (userBal.e8s < (args.amount * e8s)) {
-                return #err("Not enough ICP to send");
-              } else {
-                let result = await Ledger.transfer({
-                  to = Blob.toArray(myAccountId());
-                  fee = { e8s = 10_000 : Nat64 };
-                  memo = 0;
-                  from_subaccount = null;
-                  to_subaccount = null;
-                  created_at_time = null;
-                  amount = { e8s = args.amount * e8s };
-                });
-                switch (result) {
-                  case (#Ok(_)) {};
-                  case (#Err(err)) {
-                    return #err(transferError(err));
-                  };
-                };
-              };
+              // if (userBal.e8s < (args.amount * e8s)) {
+              //   return #err("Not enough ICP to send");
+              // } else {
+              //   let result = await Ledger.transfer({
+              //     to = Blob.toArray(myAccountId());
+              //     fee = { e8s = 10_000 : Nat64 };
+              //     memo = 0;
+              //     from_subaccount = null;
+              //     to_subaccount = null;
+              //     created_at_time = null;
+              //     amount = { e8s = args.amount * e8s };
+              //   });
+              //   switch (result) {
+              //     case (#Ok(_)) {};
+              //     case (#Err(err)) {
+              //       return #err(transferError(err));
+              //     };
+              //   };
+              // };
             } else {
               return #err("Bid amount is lower than current highest bid");
             };
@@ -247,7 +247,6 @@ actor Self {
             auctionBids.put(auction.id, auctionBidsList);
             bids.put(newBidId, newBid);
 
-            // refund previous highest bidder and update bid
             let updatedHighestBid : Bid = {
               highestBid with
               refunded = true;

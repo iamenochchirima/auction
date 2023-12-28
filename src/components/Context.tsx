@@ -23,6 +23,7 @@ interface AuthContextType {
   identity: any;
   principal: any;
   backendActor: any;
+  LEDGER: any;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -52,6 +53,7 @@ export const useAuthClient = (options = defaultOptions) => {
   const [identity, setIdentity] = useState<any>(null);
   const [principal, setPrincipal] = useState<any>(null);
   const [backendActor, setBackendActor] = useState<any>(null);
+  const [LEDGER, setLEDGER] = useState<any>(null);
 
   useEffect(() => {
     AuthClient.create(options.createOptions).then(async (client) => {
@@ -82,14 +84,11 @@ export const useAuthClient = (options = defaultOptions) => {
 
     let ic = icblast({ identity: identity, local: true });
 
-    let can = await ic(canisterId);
+    let _backendcan = await ic(canisterId);
 
-    // const actor = createActor(canisterId, {
-    //   agentOptions: {
-    //     identity,
-    //   },
-    // });
-    setBackendActor(can);
+    let ledgerCan = await ic("ryjl3-tyaaa-aaaaa-aaaba-cai");
+    setBackendActor(_backendcan);
+    setLEDGER(ledgerCan);
   }
 
   async function logout() {
@@ -105,6 +104,7 @@ export const useAuthClient = (options = defaultOptions) => {
     identity,
     principal,
     backendActor,
+    LEDGER,
   };
 };
 
