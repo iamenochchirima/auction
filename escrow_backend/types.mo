@@ -1,8 +1,10 @@
 import Account   "./utils/Account";
+import Text "mo:base/Text";
 
 module {
      public type Bid = {
         id: Text;
+        bidderPrincipal: Text;
         bidder: Account.AccountIdentifier;
         amount: Nat64;
         refunded: Bool;

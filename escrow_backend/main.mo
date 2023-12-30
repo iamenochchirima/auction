@@ -16,6 +16,7 @@ import { setTimer; recurringTimer } "mo:base/Timer";
 import Array "mo:base/Array";
 import Iter "mo:base/Iter";
 import Result "mo:base/Result";
+import Buffer "mo:base/Buffer";
 
 import Account "./utils/Account";
 import Types "types";
@@ -23,8 +24,8 @@ import Utils "utils/utils";
 
 actor Self {
 
-  let AuctionInterval = 600; // seconds
-  let AuctionIntervalNanoseconds = 600_000_000_000;
+  let AuctionInterval = 1200; // seconds
+  let AuctionIntervalNanoseconds = 1_200_000_000_000;
   let e8s : Nat64 = 100000000;
   let MintetAccount = "278b012b6396eac3f959e62c258d989aea98b5112aceb09fbbc83edc3138966f";
 
@@ -36,8 +37,26 @@ actor Self {
   type Balance = Types.Balance;
 
   var bids = HashMap.HashMap<BidId, Bid>(0, Text.equal, Text.hash);
+  private stable var bidEntries : [(BidId, Bid)] = [];
+
   var auctions = HashMap.HashMap<AuctionId, Auction>(0, Text.equal, Text.hash);
-  var auctionBids = HashMap.HashMap<AuctionId, List.List<Bid>>(0, Text.equal, Text.hash);
+  private stable var auctionEntries : [(AuctionId, Auction)] = [];
+
+  var auctionBids = HashMap.HashMap<AuctionId, List.List<BidId>>(0, Text.equal, Text.hash);
+  private stable var auctionBidsEntries : [(AuctionId, List.List<BidId>)] = [];
+
+  system func preupgrade() {
+    bidEntries := Iter.toArray(bids.entries());
+    auctionEntries := Iter.toArray(auctions.entries());
+    auctionBidsEntries := Iter.toArray(auctionBids.entries());
+
+  };
+
+  system func postupgrade() {
+    bids := HashMap.fromIter<BidId, Bid>(bidEntries.vals(), 0, Text.equal, Text.hash);
+    auctions := HashMap.fromIter<AuctionId, Auction>(auctionEntries.vals(), 0, Text.equal, Text.hash);
+    auctionBids := HashMap.fromIter<AuctionId, List.List<BidId>>(auctionBidsEntries.vals(), 0, Text.equal, Text.hash);
+  };
 
   private func createAuction() : async () {
     // get current ongoing auctions
@@ -88,6 +107,30 @@ actor Self {
     await createAuction();
   };
 
+  public shared query func getAuctionBids(id : Text) : async [Bid] {
+    var _bids: List.List<Text> = switch (auctionBids.get(id)) {
+      case null {
+        List.nil();
+      };
+      case (?bids) {
+        bids;
+      };
+    };
+    let idsArray = List.toArray(_bids);
+    var bidsBuffer = Buffer.Buffer<Bid>(0);
+    for (bidId in idsArray.vals()) {
+      let _bid = bids.get(bidId);
+      switch (_bid) {
+        case (?bid) {
+          bidsBuffer.add(bid);
+        };
+        case null {};
+      };
+    };
+
+    return Buffer.toArray(bidsBuffer);
+  };
+
   public shared query func getAuction(id : Text) : async ?Auction {
     auctions.get(id);
   };
@@ -132,6 +175,7 @@ actor Self {
     let currentTime = Time.now();
     let newBid : Bid = {
       id = newBidId;
+      bidderPrincipal = Principal.toText(caller);
       bidder = bidder;
       amount = args.amount * e8s;
       refunded = false;
@@ -143,55 +187,31 @@ actor Self {
     switch (auction) {
       case (#ok(auction)) {
 
-        var auctionBidsList : List.List<Bid> = switch (auctionBids.get(auction.id)) {
+        var auctionBidsIdsList : List.List<BidId> = switch (auctionBids.get(auction.id)) {
           case null {
             List.nil();
           };
-          case (?bids) {
-            bids;
+          case (?ids) {
+            ids;
           };
         };
 
         switch (auction.highestBid) {
           case (null) {
-            // // Transfer ICP to the canister account
-            // let userBal = await Ledger.account_balance({
-            //   account = Blob.toArray(bidder);
-            // });
-
-            // if (userBal.e8s < (args.amount * e8s)) {
-            //   return #err("Not enough ICP to send");
-            // } else {
-            //   let result = await Ledger.transfer({
-            //     to = Blob.toArray(myAccountId());
-            //     fee = { e8s = 10_000 : Nat64 };
-            //     memo = 0;
-            //     from_subaccount = null;
-            //     to_subaccount = null;
-            //     created_at_time = null;
-            //     amount = { e8s = args.amount * e8s };
-            //   });
-            //   switch (result) {
-            //     case (#Ok(_)) {};
-            //     case (#Err(err)) {
-            //       return #err(transferError(err));
-            //     };
-            //   };
-            // };
-
-            // Update auction and bids
             let updatedAuction : Auction = {
               auction with
               highestBid = ?newBid;
             };
             auctions.put(auction.id, updatedAuction);
-            auctionBidsList := List.push(newBid, auctionBidsList);
-            auctionBids.put(auction.id, auctionBidsList);
+            auctionBidsIdsList := List.push(newBid.id, auctionBidsIdsList);
+            auctionBids.put(auction.id, auctionBidsIdsList);
             bids.put(newBidId, newBid);
             return #ok("Bid placed successfully");
           };
           case (?highestBid) {
-            if ((args.amount * e8s) > highestBid.amount) {
+            if ((args.amount * e8s) <= highestBid.amount) {
+              return #err("Bid amount is lower than current highest bid");
+            } else {
               // Transfer ICP to the previous highest bidder account
               let transfereRes = await Ledger.transfer({
                 to = Blob.toArray(highestBid.bidder);
@@ -203,56 +223,31 @@ actor Self {
                 amount = { e8s = highestBid.amount };
               });
               switch (transfereRes) {
-                case (#Ok(_)) {};
+                case (#Ok(_)) {
+                  // Update the previous highest bidder's bid
+                  let updatedHighestBid : Bid = {
+                    highestBid with
+                    refunded = true;
+                  };
+                  bids.put(highestBid.id, updatedHighestBid);
+
+                  // Update auction and bids
+                  let updatedAuction : Auction = {
+                    auction with
+                    highestBid = ?newBid;
+                  };
+                  auctions.put(auction.id, updatedAuction);
+                  auctionBidsIdsList := List.push(newBid.id, auctionBidsIdsList);
+                  auctionBids.put(auction.id, auctionBidsIdsList);
+                  bids.put(newBidId, newBid);
+                  return #ok("Bid placed successfully");
+                };
                 case (#Err(err)) {
                   return #err(transferError(err));
                 };
               };
 
-              // Transfer ICP to the canister account
-              // let userBal = await Ledger.account_balance({
-              //   account = Blob.toArray(bidder);
-              // });
-
-              // if (userBal.e8s < (args.amount * e8s)) {
-              //   return #err("Not enough ICP to send");
-              // } else {
-              //   let result = await Ledger.transfer({
-              //     to = Blob.toArray(myAccountId());
-              //     fee = { e8s = 10_000 : Nat64 };
-              //     memo = 0;
-              //     from_subaccount = null;
-              //     to_subaccount = null;
-              //     created_at_time = null;
-              //     amount = { e8s = args.amount * e8s };
-              //   });
-              //   switch (result) {
-              //     case (#Ok(_)) {};
-              //     case (#Err(err)) {
-              //       return #err(transferError(err));
-              //     };
-              //   };
-              // };
-            } else {
-              return #err("Bid amount is lower than current highest bid");
             };
-
-            // Update auction and bids
-            let updatedAuction : Auction = {
-              auction with
-              highestBid = ?newBid;
-            };
-            auctions.put(auction.id, updatedAuction);
-            auctionBidsList := List.push(newBid, auctionBidsList);
-            auctionBids.put(auction.id, auctionBidsList);
-            bids.put(newBidId, newBid);
-
-            let updatedHighestBid : Bid = {
-              highestBid with
-              refunded = true;
-            };
-            bids.put(highestBid.id, updatedHighestBid);
-            return #ok("Bid placed successfully");
           };
         };
       };
