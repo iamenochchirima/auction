@@ -29,6 +29,8 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+const network = process.env.DFX_NETWORK || "local";
+
 interface DefaultOptions {
   createOptions: AuthClientCreateOptions;
   loginOptions: AuthClientLoginOptions;
@@ -42,7 +44,7 @@ const defaultOptions: DefaultOptions = {
   },
   loginOptions: {
     identityProvider:
-      process.env.DFX_NETWORK === "ic"
+      network === "ic"
         ? "https://identity.ic0.app/#authorize"
         : `http://localhost:4943?canisterId=${iiCanId}`,
   },
@@ -84,7 +86,7 @@ export const useAuthClient = (options = defaultOptions) => {
 
     setAuthClient(client);
 
-    let ic = icblast({ identity: identity, local: true });
+    let ic = icblast({ identity: identity, local: network === "local" ? true : false });
 
     let _backendcan = await ic(canisterId);
 
@@ -92,10 +94,7 @@ export const useAuthClient = (options = defaultOptions) => {
     setBackendActor(_backendcan);
     setLEDGER(ledgerCan);
 
-    let liveBlast = await icblast({local: false });
-
-
-    let ledgerArchive = await liveBlast("qjdve-lqaaa-aaaaa-aaaeq-cai");
+    let ledgerArchive = await ic("qjdve-lqaaa-aaaaa-aaaeq-cai");
     setLedgerArchive(ledgerArchive);
   }
 

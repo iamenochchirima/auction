@@ -7,6 +7,7 @@
         "moduleResolution": "node",
         "esModuleInterop": true,
         "allowJs": true,
-        "outDir": "HACK_BECAUSE_OF_ALLOW_JS"
+        "outDir": "HACK_BECAUSE_OF_ALLOW_JS",
+        "typeRoots": ["./src/types"]
     }
 }

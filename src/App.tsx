@@ -9,6 +9,7 @@ import { Principal } from "@dfinity/principal";
 import { canisterId } from "./declarations/escrow_backend";
 import { QueryBlocksResponse } from "./declarations/ledger_canister/ledger_canister.did";
 import { formatCountdown, formatDate } from "./utils";
+import PlugConnect from "@psychedelic/plug-connect";
 
 interface Result {
   err?: null;
@@ -59,6 +60,8 @@ const App = () => {
   const [gettingBalances, setGettingBalances] = useState<boolean>(false);
   const [gettingAuction, setGettingAuction] = useState<boolean>(false);
   const [creatingAuction, setCreatingAuction] = useState<boolean>(false);
+  const [AID, setAID] = useState<string>("");
+  const [canisterAID, setCanisterAID] = useState<string>("");
 
   const [bidAmount, setBidAmount] = useState<number>(0);
 
@@ -101,8 +104,20 @@ const App = () => {
     }
     if (LEDGER) {
       getLedgerBlocks();
+      getAid();
     }
   }, [backendActor, LEDGER]);
+
+  const getAid = async () => {
+    let aid = await LEDGER.account_identifier({
+      owner: identity?.getPrincipal(),
+    });
+    let canAID = await LEDGER.account_identifier({
+      owner: Principal.fromText(canisterId),
+    });
+    setCanisterAID(toHexString(canAID));
+    setAID(toHexString(aid));
+  };
 
   useEffect(() => {
     if (currentAuction) {
@@ -121,7 +136,6 @@ const App = () => {
 
   const getAuctionBids = async () => {
     let bids: Bid[] = await backendActor.getAuctionBids(currentAuction.id);
-    console.log(bids);
     let modififiedBids = bids.map((bid) => {
       return {
         ...bid,
@@ -293,6 +307,22 @@ const App = () => {
 
   return (
     <div>
+      {isAuthenticated && (
+        <div className="">
+          <h3 className="text-gray-800 font-cormorant"> Your Address: {AID}</h3>
+          <h3 className="text-gray-800 font-cormorant">
+            Your Principal: {identity?.getPrincipal().toString()}
+          </h3>
+          <hr />
+          <h3 className="text-gray-800 font-cormorant mt-5">
+            {" "}
+            Canister Address: {canisterAID}
+          </h3>
+          <h3 className="text-gray-800 font-cormorant">
+            Canister ID: {canisterId}
+          </h3>
+        </div>
+      )}
       <div className="p-5 my-5 flex justify-between">
         {isAuthenticated && (
           <>
@@ -300,8 +330,8 @@ const App = () => {
               <div>Getting balances...</div>
             ) : (
               <div className=" flex flex-col justify-start gap-5">
-                <h1>Canister Balance: {Number(canisterBal) / e8s}</h1>
-                <h1>My Balance: {Number(icpBalance) / e8s}</h1>
+                <h1>Canister Balance: {Number(canisterBal) / e8s} ICP</h1>
+                <h1>My Balance: {Number(icpBalance) / e8s} ICP</h1>
               </div>
             )}
           </>
@@ -313,6 +343,22 @@ const App = () => {
           >
             {isAuthenticated ? "Logout" : "Login"}
           </button>
+          {/* {!isAuthenticated ? (
+            <PlugConnect
+              whitelist={[
+                "fh3gm-mqaaa-aaaal-qc54q-cai",
+                "foynq-2yaaa-aaaal-qc55a-cai",
+              ]}
+              onConnectCallback={getPrincipal}
+            />
+          ) : (
+            <button
+              className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+              onClick={logout}
+            >
+              Logout
+            </button>
+          )} */}
           {!currentAuction && (
             <button
               className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"

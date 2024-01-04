@@ -1,5 +1,3 @@
-import Ledger "canister:ledger_canister";
-
 import Debug "mo:base/Debug";
 import Error "mo:base/Error";
 import Int "mo:base/Int";
@@ -17,6 +15,7 @@ import Array "mo:base/Array";
 import Iter "mo:base/Iter";
 import Result "mo:base/Result";
 import Buffer "mo:base/Buffer";
+import Nat "mo:base/Nat";
 
 import Account "./utils/Account";
 import Types "types";
@@ -35,6 +34,7 @@ actor Self {
   type BidId = Text;
   type AuctionId = Text;
   type Balance = Types.Balance;
+
 
   var bids = HashMap.HashMap<BidId, Bid>(0, Text.equal, Text.hash);
   private stable var bidEntries : [(BidId, Bid)] = [];
@@ -108,7 +108,7 @@ actor Self {
   };
 
   public shared query func getAuctionBids(id : Text) : async [Bid] {
-    var _bids: List.List<Text> = switch (auctionBids.get(id)) {
+    var _bids : List.List<Text> = switch (auctionBids.get(id)) {
       case null {
         List.nil();
       };
@@ -133,6 +133,18 @@ actor Self {
 
   public shared query func getAuction(id : Text) : async ?Auction {
     auctions.get(id);
+  };
+
+  let LEDGER = actor "ryjl3-tyaaa-aaaaa-aaaba-cai" : actor {
+    account_balance : shared query Types.BinaryAccountBalanceArgs -> async Types.Tokens;
+    account_balance_dfx : shared query Types.AccountBalanceArgs -> async Types.Tokens;
+    account_identifier : shared query Types.Account -> async Blob;
+    query_blocks : shared query Types.GetBlocksArgs -> async Types.QueryBlocksResponse;
+    query_encoded_blocks : shared query Types.GetBlocksArgs -> async Types.QueryEncodedBlocksResponse;
+    send_dfx : shared Types.SendArgs -> async Nat64;
+    symbol : shared query () -> async Types.Symbol;
+    transfer : shared Types.TransferArgs -> async Types.Result_5;
+    transfer_fee : shared query {} -> async Types.TransferFee;
   };
 
   public shared query func getOngoingAuction() : async Result.Result<Auction, Text> {
@@ -213,8 +225,8 @@ actor Self {
               return #err("Bid amount is lower than current highest bid");
             } else {
               // Transfer ICP to the previous highest bidder account
-              let transfereRes = await Ledger.transfer({
-                to = Blob.toArray(highestBid.bidder);
+              let transfereRes = await LEDGER.transfer({
+                to = highestBid.bidder;
                 fee = { e8s = 10_000 : Nat64 };
                 memo = 0;
                 from_subaccount = null;
@@ -257,7 +269,7 @@ actor Self {
     };
   };
 
-  func transferError(err : Ledger.TransferError) : Text {
+  func transferError(err : Types.TransferError_1) : Text {
     switch (err) {
       case (#BadFee(msg)) {
         "Bad fee: " # Nat64.toText(msg.expected_fee.e8s);
@@ -279,15 +291,15 @@ actor Self {
 
   public shared ({ caller }) func getUserBalance() : async Balance {
     let callerAID = userAID(caller);
-    let callerBalance = await Ledger.account_balance({
-      account = Blob.toArray((callerAID));
+    let callerBalance = await LEDGER.account_balance({
+      account = callerAID;
     });
     callerBalance;
   };
 
   public shared func getCanisterBalance() : async Balance {
-    let canisterBalance = await Ledger.account_balance({
-      account = Blob.toArray(myAccountId());
+    let canisterBalance = await LEDGER.account_balance({
+      account = myAccountId();
     });
     canisterBalance;
   };
