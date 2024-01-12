@@ -25,6 +25,7 @@ interface AuthContextType {
   backendActor: any;
   LEDGER: any;
   ledgerArchive : any;
+  nftActor: any;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -58,6 +59,7 @@ export const useAuthClient = (options = defaultOptions) => {
   const [backendActor, setBackendActor] = useState<any>(null);
   const [LEDGER, setLEDGER] = useState<any>(null);
   const [ledgerArchive, setLedgerArchive] = useState<any>(null);
+  const [nftActor, setNftActor] = useState<any>(null);
 
   useEffect(() => {
     AuthClient.create(options.createOptions).then(async (client) => {
@@ -90,6 +92,10 @@ export const useAuthClient = (options = defaultOptions) => {
 
     let _backendcan = await ic(canisterId);
 
+    let _nftActor = await ic("ryjl3-tyaaa-aaaaa-aaaba-cai");
+
+    setNftActor(_nftActor);
+
     let ledgerCan = await ic("ryjl3-tyaaa-aaaaa-aaaba-cai");
     setBackendActor(_backendcan);
     setLEDGER(ledgerCan);
@@ -112,7 +118,8 @@ export const useAuthClient = (options = defaultOptions) => {
     principal,
     backendActor,
     LEDGER,
-    ledgerArchive
+    ledgerArchive,
+    nftActor
   };
 };
 
