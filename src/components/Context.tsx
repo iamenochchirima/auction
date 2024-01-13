@@ -92,7 +92,7 @@ export const useAuthClient = (options = defaultOptions) => {
 
     let _backendcan = await ic(canisterId);
 
-    let _nftActor = await ic("ryjl3-tyaaa-aaaaa-aaaba-cai");
+    let _nftActor = await ic("be2us-64aaa-aaaaa-qaabq-cai");
 
     setNftActor(_nftActor);
 

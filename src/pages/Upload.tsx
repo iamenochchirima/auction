@@ -1,5 +1,6 @@
 import React, { useState, ChangeEvent } from "react";
 import { useAuth } from "../components/Context";
+import { Asset, AssetMetadata } from "../declarations/hodl_nft/hodl_nft.did";
 
 // Extend the React HTML attributes
 declare module "react" {
@@ -12,10 +13,10 @@ declare module "react" {
 interface IFileProcessorProps {}
 
 const Upload: React.FC<IFileProcessorProps> = () => {
-    const {nftActor} = useAuth();
+  const { nftActor } = useAuth();
 
-  const [files, setFiles] = useState<File[]>([]);
-  const [jsonData, setJsonData] = useState<any[]>([]);
+  const [files, setFiles] = useState<File[] | null>(null);
+  const [jsonData, setJsonData] = useState<any[] | null>(null);
 
   const handleFolderUpload = (event: ChangeEvent<HTMLInputElement>) => {
     let folderFiles: File[] = [];
@@ -36,36 +37,68 @@ const Upload: React.FC<IFileProcessorProps> = () => {
       try {
         const text = await file.text();
         const data = JSON.parse(text);
-        // Check if data is an array, otherwise wrap it in an array
         setJsonData(Array.isArray(data) ? data : [data]);
       } catch (error) {
         console.error("Error reading JSON file:", error);
-        setJsonData([]); // Reset jsonData in case of error
+        setJsonData([]);
       }
     }
   };
 
-  const processJsonData = () => {
-    if (Array.isArray(jsonData)) {
-      jsonData.forEach((item, index) => {
-        console.log(`Processing JSON item ${index}:`, item);
-        // Add your JSON processing logic here
-      });
-    } else {
-      console.log("No valid JSON data to process");
+  // const processJsonData = () => {
+  //   if (Array.isArray(jsonData)) {
+  //     jsonData.forEach((item, index) => {
+  //       console.log(`Processing JSON item ${index}:`, item);
+  //       // Add your JSON processing logic here
+  //     });
+  //   } else {
+  //     console.log("No valid JSON data to process");
+  //   }
+  // };
+
+  // const processFiles = () => {
+  //   files.forEach((file) => {
+  //     console.log("Processing file:", file.name);
+  //   });
+  // };
+
+  const handleUpload = async () => {
+    let assetIndex = 0;
+    console.log("Uploading file")
+    if (files && jsonData) {
+      for (const file of files) {
+        const fileBytes = [...new Uint8Array(await file.arrayBuffer())];
+        const fileMetadata = jsonData.find((item) => item.name === file.name);
+        let _file = {
+          ctype: "image/png",
+          data: [fileBytes],
+        };
+        let asset: Asset = {
+          name: `HODL-${assetIndex}`,
+          thumbnail: [],
+          payload: _file,
+        };
+        let nat = await nftActor.addAsset(asset);
+        console.log("Uploaded asset. Adding metadata", nat)
+        let _metadata: AssetMetadata = {
+          id: nat,
+          assetIndex: nat,
+          name: fileMetadata.name,
+          color: fileMetadata.color,
+          glasses: fileMetadata.glasses,
+          background: fileMetadata.background,
+          outfit: fileMetadata.outfit,
+          accessory: fileMetadata.accessory,
+          expression: fileMetadata.expression,
+        };
+        await nftActor.addMetadata(_metadata);
+        console.log("Uploaded metadata")
+        assetIndex++;
+      }
     }
   };
 
-  const processFiles = () => {
-    files.forEach((file) => {
-      console.log("Processing file:", file.name);
-    });
-  };
-
-  const handleUpload = () => {
-    processJsonData();
-    processFiles();
-  };
+  console.log(nftActor);
 
   return (
     <div className="max-w-md mx-auto my-10 bg-white p-8 border border-gray-200 rounded-lg shadow">
@@ -102,7 +135,7 @@ const Upload: React.FC<IFileProcessorProps> = () => {
             onClick={handleUpload}
             className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
           >
-            Process All Data
+            Upload
           </button>
         </div>
       </form>
