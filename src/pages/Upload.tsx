@@ -13,7 +13,7 @@ declare module "react" {
 interface IFileProcessorProps {}
 
 const Upload: React.FC<IFileProcessorProps> = () => {
-  const { nftActor } = useAuth();
+  const { nftActor} = useAuth();
 
   const [files, setFiles] = useState<File[] | null>(null);
   const [jsonData, setJsonData] = useState<any[] | null>(null);
@@ -65,40 +65,48 @@ const Upload: React.FC<IFileProcessorProps> = () => {
   const handleUpload = async () => {
     let assetIndex = 0;
     console.log("Uploading file")
-    if (files && jsonData) {
-      for (const file of files) {
-        const fileBytes = [...new Uint8Array(await file.arrayBuffer())];
-        const fileMetadata = jsonData.find((item) => item.name === file.name);
-        let _file = {
-          ctype: "image/png",
-          data: [fileBytes],
-        };
-        let asset: Asset = {
-          name: `HODL-${assetIndex}`,
-          thumbnail: [],
-          payload: _file,
-        };
-        let nat = await nftActor.addAsset(asset);
-        console.log("Uploaded asset. Adding metadata", nat)
-        let _metadata: AssetMetadata = {
-          id: nat,
-          assetIndex: nat,
-          name: fileMetadata.name,
-          color: fileMetadata.color,
-          glasses: fileMetadata.glasses,
-          background: fileMetadata.background,
-          outfit: fileMetadata.outfit,
-          accessory: fileMetadata.accessory,
-          expression: fileMetadata.expression,
-        };
-        await nftActor.addMetadata(_metadata);
-        console.log("Uploaded metadata")
-        assetIndex++;
+    try {
+      if (files && jsonData && nftActor) {
+        for (const file of files) {
+          const fileBytes = [...new Uint8Array(await file.arrayBuffer())];
+          const fileMetadata = jsonData.find((item) => item.name === file.name);
+          let _file = {
+            ctype: "image/png",
+            data: [fileBytes],
+          };
+          let asset: Asset = {
+            name: `HODL-${assetIndex}`,
+            thumbnail: [],
+            payload: _file,
+          };
+          let nat = await nftActor.addAsset(asset);
+          console.log("Uploaded asset. Adding metadata", nat)
+          console.log("fileMetadata", fileMetadata)
+          let _metadata: AssetMetadata = {
+            id: Number(nat),
+            assetIndex: Number(nat),
+            name: fileMetadata.name,
+            color: fileMetadata.color,
+            glasses: fileMetadata.glasses,
+            background: fileMetadata.background,
+            outfit: fileMetadata.outfit,
+            accessory: fileMetadata.accessory,
+            expression: fileMetadata.expression,
+          };
+          await nftActor.addAssetMetadata(_metadata);
+          console.log("Uploaded metadata")
+          assetIndex++;
+        }
+      } else {
+        console.log("No files or json data to upload")
+        console.log(files)
+        console.log(jsonData)
+        console.log(nftActor)
       }
+    } catch (error) {
+      console.log("Error uploading file", error)
     }
   };
-
-  console.log(nftActor);
 
   return (
     <div className="max-w-md mx-auto my-10 bg-white p-8 border border-gray-200 rounded-lg shadow">

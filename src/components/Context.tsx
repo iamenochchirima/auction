@@ -6,31 +6,23 @@ import React, {
   FC,
 } from "react";
 import {
-  AuthClient,
   AuthClientCreateOptions,
   AuthClientLoginOptions,
 } from "@dfinity/auth-client";
 import { canisterId as iiCanId } from "../declarations/internet_identity";
-import { canisterId, createActor } from "../declarations/escrow_backend";
-// @ts-ignore
-import icblast from "@infu/icblast";
+import { _SERVICE as TOKENSERVICE } from "../declarations/hodl_nft/hodl_nft.did";
+import { tokenIDL } from "./factory";
+import { Actor, ActorSubclass, HttpAgent } from "@dfinity/agent";
 
 interface AuthContextType {
-  isAuthenticated: boolean;
-  login: () => void;
-  logout: () => void;
-  authClient: AuthClient | null;
-  identity: any;
-  principal: any;
-  backendActor: any;
-  LEDGER: any;
-  ledgerArchive : any;
-  nftActor: any;
+  nftActor: ActorSubclass<TOKENSERVICE> | null;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
 const network = process.env.DFX_NETWORK || "local";
+const localhost = "http://localhost:4943";
+const host = "https://icp0.io";
 
 interface DefaultOptions {
   createOptions: AuthClientCreateOptions;
@@ -52,74 +44,41 @@ const defaultOptions: DefaultOptions = {
 };
 
 export const useAuthClient = (options = defaultOptions) => {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [authClient, setAuthClient] = useState<AuthClient | null>(null);
-  const [identity, setIdentity] = useState<any>(null);
-  const [principal, setPrincipal] = useState<any>(null);
-  const [backendActor, setBackendActor] = useState<any>(null);
-  const [LEDGER, setLEDGER] = useState<any>(null);
-  const [ledgerArchive, setLedgerArchive] = useState<any>(null);
-  const [nftActor, setNftActor] = useState<any>(null);
+ 
+
+  const [nftActor, setNftActor] = useState<ActorSubclass<TOKENSERVICE> | null>(
+    null
+  );
+
 
   useEffect(() => {
-    AuthClient.create(options.createOptions).then(async (client) => {
-      updateClient(client);
-    });
+
+      updateClient();
+  
   }, []);
 
-  const login = () => {
-    authClient?.login({
-      ...options.loginOptions,
-      onSuccess: () => {
-        updateClient(authClient);
-      },
+  async function updateClient() {
+    
+
+    let agent = new HttpAgent({
+      host: network === "ic" ? host : localhost,
     });
-  };
 
-  async function updateClient(client: AuthClient) {
-    const isAuthenticated = await client.isAuthenticated();
-    setIsAuthenticated(isAuthenticated);
+    if (network !== "ic") {
+      agent.fetchRootKey();
+    }
 
-    const identity = client.getIdentity();
-    setIdentity(identity);
-
-    const principal = identity.getPrincipal();
-    setPrincipal(principal);
-
-    setAuthClient(client);
-
-    let ic = icblast({ identity: identity, local: network === "local" ? true : false });
-
-    let _backendcan = await ic(canisterId);
-
-    let _nftActor = await ic("be2us-64aaa-aaaaa-qaabq-cai");
-
+    const _nftActor: ActorSubclass<TOKENSERVICE> = Actor.createActor(tokenIDL, {
+      agent,
+      canisterId: "br5f7-7uaaa-aaaaa-qaaca-cai",
+    });
     setNftActor(_nftActor);
 
-    let ledgerCan = await ic("ryjl3-tyaaa-aaaaa-aaaba-cai");
-    setBackendActor(_backendcan);
-    setLEDGER(ledgerCan);
-
-    let ledgerArchive = await ic("qjdve-lqaaa-aaaaa-aaaeq-cai");
-    setLedgerArchive(ledgerArchive);
-  }
-
-  async function logout() {
-    await authClient?.logout();
-    await updateClient(authClient);
   }
 
   return {
-    isAuthenticated,
-    login,
-    logout,
-    authClient,
-    identity,
-    principal,
-    backendActor,
-    LEDGER,
-    ledgerArchive,
-    nftActor
+    nftActor,
+ 
   };
 };
 

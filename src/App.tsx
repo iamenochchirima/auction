@@ -11,8 +11,8 @@ const App = () => {
     <BrowserRouter>
       <Routes>
       <Route element={<Layout />}>
-        <Route index element={<Auction />} />
-        <Route path="/upload" element={<Upload />} />
+        <Route index element={<Upload />} />
+        {/* <Route path="/upload" element={} /> */}
       </Route>
       </Routes>
     </BrowserRouter>
